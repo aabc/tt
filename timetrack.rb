@@ -248,7 +248,7 @@ GetoptLong.new(
     exit 0
   when '--daemon'
     @daemon = true
-    @delay = arg.to_i if arg
+    @delay = arg.to_i if arg.to_i > 0
   when '--help'
     puts "Help: #{__FILE__} [--options...] [regexps...]"
     puts "  --list    list all matched entries"
