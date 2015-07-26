@@ -6,12 +6,14 @@
 require "pathname"
 require 'getoptlong'
 require 'time'
+require 'etc'
 
 @tt_log = File.expand_path "~/tt/tt.log" # main worktime log
 @flock  = File.expand_path "~/tt/.lock"  # also contains pid
 @delay  = 10.0 # scan every n seconds
 @pts_times = {}
 @now = Time.now
+@me = Process.uid
 
 def scan_proc_linux
   @proc = {}
@@ -31,8 +33,9 @@ def scan_proc_linux
       next if @proc[link][2] == pid	# not parent
     end
     cmdline = IO.read("#{fd}/cmdline").tr("\000", ' ').strip rescue nil
+    uid = File.stat("#{fd}/stat").uid rescue -3
     @proc[link] ||= []
-    @proc[link] = [cmdline, pid, ppid, pgrp]
+    @proc[link] = [cmdline, pid, uid, ppid, pgrp]
   end
   @proc.delete_if {|k,v| v[0] =~ /^screen\b/}
 end
@@ -58,10 +61,11 @@ def monitor(debug = false)
 	next unless @proc[tty]
 	prog = @proc[tty][0]
 	pid  = @proc[tty][1]
-	hash = [ts, prog, pid]
+	uid  = @proc[tty][2]
+	hash = [ts, uid, prog, pid]
 	if hash != @pts_times[tty]
-	  puts [ts, tty, pid, prog, now - mt].join(' ') if debug
-	  File.open(@tt_log, 'a') {|f| f.puts "#{ts} #{tty} #{prog}"}
+	  puts [ts, tty, pid, uid, prog, now - mt].join(' ') if debug
+	  File.open(@tt_log, 'a') {|f| f.puts "#{ts} #{tty} #{uid} #{prog}"}
 	end
 	@pts_times[tty] = hash
       end
@@ -128,7 +132,16 @@ def aggregate(f, matches = [])
   f.each_line_reverse do |li|
     li.strip!
     next unless re.match(li)
-    day, time, pts, cmd = li.split(' ', 4)
+    day, time, pts, uid, cmd = li.split(' ', 5)
+    if uid =~ /^\d+$/
+      if uid.to_i != @me
+	next unless @allusers
+	uid = '<' + Etc.getpwuid(uid.to_i).name + '>'
+      else
+	uid = nil
+      end
+    end
+    cmd = "#{uid} #{cmd}" if uid
     ts = "#{day} #{time}"
     break if @limit && (@now - Time.parse(ts)) > @limit
     mk = ts unless mk
@@ -205,10 +218,13 @@ GetoptLong.new(
   ["--today",       GetoptLong::OPTIONAL_ARGUMENT],
   ["--thismonth",   GetoptLong::OPTIONAL_ARGUMENT],
   ["--mark",  '-m', GetoptLong::OPTIONAL_ARGUMENT],
+  ["--all",   '-A', GetoptLong::NO_ARGUMENT],
   ["--daemon",'-d', GetoptLong::OPTIONAL_ARGUMENT],
   ["--help",  '-h', GetoptLong::NO_ARGUMENT]
 ).each do |opt, arg|
   case opt
+  when '--all'
+    @allusers = true
   when '--pts'
     @nopts = false
   when '--list'
