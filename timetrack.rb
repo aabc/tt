@@ -18,6 +18,7 @@ require 'etc'
 def scan_proc_linux
   @proc = {}
   pdir = Dir['/proc/*']
+  pdir.sort_by! {|e| File.stat(e).mtime rescue 0}
   pdir.each do |fd|
     next if fd[6..-1].to_i == 0
     stat = IO.read("#{fd}/stat").split(' ', 7) rescue []
@@ -26,16 +27,16 @@ def scan_proc_linux
     ppid = stat[3].to_i
     pgrp = stat[4].to_i
     tty  = stat[6].to_i
-    link = "pts/#{tty & 0xff}" if (tty & 0xff00) == 0x8800
-    next unless link
-    if @proc[link]
+    pts  = "pts/#{tty & 0xff}" if (tty & 0xff00) == 0x8800
+    next unless pts
+    if @proc[pts]
       next if pid != pgrp		# not process group leader
-      next if @proc[link][2] == pid	# not parent
+      next if @proc[pts][2] == pid	# not parent
     end
     cmdline = IO.read("#{fd}/cmdline").tr("\000", ' ').strip rescue nil
     uid = File.stat("#{fd}/stat").uid rescue -3
-    @proc[link] ||= []
-    @proc[link] = [cmdline, pid, uid, ppid, pgrp]
+    @proc[pts] ||= []
+    @proc[pts] = [cmdline, pid, uid, ppid, pgrp]
   end
   @proc.delete_if {|k,v| v[0] =~ /^screen\b/}
 end
