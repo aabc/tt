@@ -15,6 +15,7 @@ require 'time'
 @pts_times = {}
 @now = Time.now
 @me = Process.uid
+@home = ENV['HOME']
 @wdays = %w{Su Mo Tu We Th Fr Sa Su}
 
 def scan_proc_linux
@@ -36,9 +37,10 @@ def scan_proc_linux
       next if @proc[pts][2] == pid	# not parent
     end
     cmdline = IO.read("#{fd}/cmdline").tr("\000", ' ').strip rescue nil
+    cwd = File.readlink("#{fd}/cwd").tr("\000", ' ').strip rescue nil
     uid = File.stat("#{fd}/stat").uid rescue -3
     @proc[pts] ||= []
-    @proc[pts] = [cmdline, pid, uid, ppid, pgrp]
+    @proc[pts] = [cmdline, pid, uid, ppid, pgrp, cwd]
   end
   @proc.delete_if {|k,v| v[0] =~ /^screen\b/}
 end
@@ -65,10 +67,11 @@ def monitor(debug = false)
 	prog = @proc[tty][0]
 	pid  = @proc[tty][1]
 	uid  = @proc[tty][2]
-	hash = [ts, uid, prog, pid]
+	cwd  = @proc[tty][5]
+	hash = [ts, uid, cwd, prog, pid]
 	if hash != @pts_times[tty]
-	  puts [ts, tty, pid, uid, prog, now - mt].join(' ') if debug
-	  File.open(@tt_log, 'a') {|f| f.puts "#{ts} #{tty} #{uid} #{prog}"}
+	  puts [ts, tty, pid, uid, cwd, prog, now - mt].join(' ') if debug
+	  File.open(@tt_log, 'a') {|f| f.puts "#{ts} #{tty} #{uid} [#{cwd}] #{prog}"}
 	end
 	@pts_times[tty] = hash
       end
@@ -148,6 +151,14 @@ def aggregate(f, matches = [])
       else
 	uid = nil
       end
+    end
+    if cmd =~ /^(\[[^\]]*\]) (.*)/
+      cwd = $1
+      cmd = $2
+    end
+    if @pwd and cwd
+      cwd.sub!(%r{^\[#{@home}(/|\])}, '[~\\1')
+      cmd = cwd + ' ' + cmd
     end
     cmd = "#{uid} #{cmd}" if uid
     ts = "#{day} #{time}"
@@ -260,6 +271,7 @@ GetoptLong.new(
   ["--daemon",'-d',  GetoptLong::OPTIONAL_ARGUMENT],
   ["--exclude",'-e', GetoptLong::REQUIRED_ARGUMENT],
   ["--log",          GetoptLong::NO_ARGUMENT],
+  ["--pwd", "--cwd", GetoptLong::NO_ARGUMENT],
   ["--map",          GetoptLong::NO_ARGUMENT],
   ["--hmap",         GetoptLong::NO_ARGUMENT],
   ["--help",  '-h',  GetoptLong::NO_ARGUMENT]
@@ -308,6 +320,8 @@ GetoptLong.new(
     (@exclude ||= []) << arg
   when '--log'
     @log = true
+  when '--pwd'
+    @pwd = true
   when '--map'
     @map = true
   when '--hmap'
