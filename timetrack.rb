@@ -201,13 +201,15 @@ def aggregate(f, matches = [])
     end
   end
   if @map
-    print "%10s Wd: %s\n" % ["Date\\Time", (0..23).map{|e| " %02d" % e}.join]
+    print "%10s Wd:%s\n" % ["Date\\Time", (0..23).map{|e| " %02d" % e}.join]
     map.sort.each do |k,a|
       wday = Time.parse(k).wday
       wday = 7 if wday == 0
-      print col("%10s %s: %s\n" % [k,
+      print col("%10s %s:%s|%d\n" % [k,
 	@wdays[wday],
-	a.map{|e| "%3s" % [(e == 0)? '.' : e]}.join], (wday > 5)? '1;35' : '')
+	a.map{|e| "%3s" % [(e == 0)? '.' : e]}.join,
+	a.reduce(&:+)
+      ], (wday > 5)? '1;35' : '')
     end
   end
 end
