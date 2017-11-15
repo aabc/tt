@@ -18,7 +18,7 @@ require 'etc'
 def scan_proc_linux
   @proc = {}
   pdir = Dir['/proc/*']
-  pdir.sort_by! {|e| File.stat(e).mtime rescue 0}
+  pdir.sort_by! {|e| File.stat(e).mtime.to_i rescue 0}
   pdir.each do |fd|
     next if fd[6..-1].to_i == 0
     stat = IO.read("#{fd}/stat").split(' ', 7) rescue []
