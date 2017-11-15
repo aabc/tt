@@ -7,6 +7,7 @@ require "pathname"
 require 'getoptlong'
 require 'time'
 require 'etc'
+require 'time'
 
 @tt_log = File.expand_path "~/tt/tt.log" # main worktime log
 @flock  = File.expand_path "~/tt/.lock"  # also contains pid
@@ -14,6 +15,7 @@ require 'etc'
 @pts_times = {}
 @now = Time.now
 @me = Process.uid
+@wdays = %w{Su Mo Tu We Th Fr Sa Su}
 
 def scan_proc_linux
   @proc = {}
@@ -199,9 +201,13 @@ def aggregate(f, matches = [])
     end
   end
   if @map
-    print "%10s: %s\n" % ["Date/Time", (0..23).map{|e| " %02d" % e}.join]
+    print "%10s Wd: %s\n" % ["Date\\Time", (0..23).map{|e| " %02d" % e}.join]
     map.sort.each do |k,a|
-      print "%10s: %s\n" % [k, a.map{|e| "%3s" % [(e == 0)? '.' : e]}.join]
+      wday = Time.parse(k).wday
+      wday = 7 if wday == 0
+      print col("%10s %s: %s\n" % [k,
+	@wdays[wday],
+	a.map{|e| "%3s" % [(e == 0)? '.' : e]}.join], (wday > 5)? '1;35' : '')
     end
   end
 end
