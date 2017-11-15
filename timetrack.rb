@@ -129,10 +129,12 @@ def aggregate(f, matches = [])
   marks = Hash.new(0) # marks raw stat
   marklist = [] # marks output stat
   time_cmds = [] # to track cmds with shared time
+  perday = Hash.new(0) # per day stat
 
   f.each_line_reverse do |li|
     li.strip!
     next unless re.match(li)
+    next if @exclude and @exclude.match(li)
     day, time, pts, uid, cmd = li.split(' ', 5)
     if uid =~ /^\d+$/
       if uid.to_i != @me
@@ -160,6 +162,7 @@ def aggregate(f, matches = [])
       time_dups[ts] = true
       count += 1
       marks[mk] += 1
+      perday[day] += 1
       time_cmds.each { |c| cmd_shared[c] += 1.0 / time_cmds.size }
       time_cmds = []
     else
@@ -188,6 +191,11 @@ def aggregate(f, matches = [])
   cmd_count.to_a.reject {|a| !a[0]}.sort.each do |cmd, cnt|
     puts "  %3d %7.2f  %.*s" % [cnt, cmd_shared[cmd], @cols - 10, cmd]
   end
+  if @log
+    perday.to_a.reverse.each do |k, v|
+      puts col("  %s: %d minutes (%.2f hours)" % [k, v, v / 60.0])
+    end
+  end
 end
 
 def today
@@ -208,20 +216,22 @@ end
 @limit = today
 @nopts = true
 GetoptLong.new(
-  ["--pts",   "-p", GetoptLong::NO_ARGUMENT],
-  ["--list",  "-l", GetoptLong::NO_ARGUMENT],
-  ["--hour",  '-H', GetoptLong::OPTIONAL_ARGUMENT],
-  ["--day",   '-D', GetoptLong::OPTIONAL_ARGUMENT],
-  ["--week",  '-W', GetoptLong::OPTIONAL_ARGUMENT],
-  ["--month", '-M', GetoptLong::OPTIONAL_ARGUMENT],
-  ["--year",  '-Y', GetoptLong::OPTIONAL_ARGUMENT],
-  ["--full",  '-f', GetoptLong::NO_ARGUMENT],
-  ["--today",       GetoptLong::OPTIONAL_ARGUMENT],
-  ["--thismonth",   GetoptLong::OPTIONAL_ARGUMENT],
-  ["--mark",  '-m', GetoptLong::OPTIONAL_ARGUMENT],
-  ["--all",   '-A', GetoptLong::NO_ARGUMENT],
-  ["--daemon",'-d', GetoptLong::OPTIONAL_ARGUMENT],
-  ["--help",  '-h', GetoptLong::NO_ARGUMENT]
+  ["--pts",   "-p",  GetoptLong::NO_ARGUMENT],
+  ["--list",  "-l",  GetoptLong::NO_ARGUMENT],
+  ["--hour",  '-H',  GetoptLong::OPTIONAL_ARGUMENT],
+  ["--day",   '-D',  GetoptLong::OPTIONAL_ARGUMENT],
+  ["--week",  '-W',  GetoptLong::OPTIONAL_ARGUMENT],
+  ["--month", '-M',  GetoptLong::OPTIONAL_ARGUMENT],
+  ["--year",  '-Y',  GetoptLong::OPTIONAL_ARGUMENT],
+  ["--full",  '-f',  GetoptLong::NO_ARGUMENT],
+  ["--today",        GetoptLong::OPTIONAL_ARGUMENT],
+  ["--thismonth",    GetoptLong::OPTIONAL_ARGUMENT],
+  ["--mark",  '-m',  GetoptLong::OPTIONAL_ARGUMENT],
+  ["--all",   '-A',  GetoptLong::NO_ARGUMENT],
+  ["--daemon",'-d',  GetoptLong::OPTIONAL_ARGUMENT],
+  ["--exclude",'-e', GetoptLong::REQUIRED_ARGUMENT],
+  ["--log",          GetoptLong::NO_ARGUMENT],
+  ["--help",  '-h',  GetoptLong::NO_ARGUMENT]
 ).each do |opt, arg|
   case opt
   when '--all'
@@ -263,6 +273,10 @@ GetoptLong.new(
   when '--mark'
     write_mark arg
     exit 0
+  when '--exclude'
+    (@exclude ||= []) << arg
+  when '--log'
+    @log = true
   when '--daemon'
     @daemon = true
     @delay = arg.to_i if arg.to_i > 0
@@ -286,6 +300,8 @@ GetoptLong.new(
     exit 0
   end
 end
+
+@exclude = Regexp.union(@exclude) if @exclude
 
 if @daemon
   f = File.open(@flock, File::RDWR|File::CREAT, 0644)
