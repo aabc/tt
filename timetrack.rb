@@ -132,13 +132,15 @@ def aggregate(f, matches = [])
   marklist = [] # marks output stat
   time_cmds = [] # to track cmds with shared time
   perday = Hash.new(0) # per day stat
-  map = Hash.new {|k,v| k[v] = Array.new(24, 0)} # per day per hour heat map
+  map  = Hash.new {|k,v| k[v] = Array.new(24, 0)} # per day per hour heat map
+  hmap = Hash.new {|k,v| k[v] = Hash.new {|k,v| k[v] = Array.new(60, 0)}} # per day per hour:minute heat map
 
   f.each_line_reverse do |li|
     li.strip!
     next unless re.match(li)
     next if @exclude and @exclude.match(li)
     day, time, pts, uid, cmd = li.split(' ', 5)
+    hour, minute = time.split(':')
     if uid =~ /^\d+$/
       if uid.to_i != @me
 	next unless @allusers
@@ -168,7 +170,8 @@ def aggregate(f, matches = [])
       perday[day] += 1
       time_cmds.each { |c| cmd_shared[c] += 1.0 / time_cmds.size }
       time_cmds = []
-      map[day][time.to_i] += 1
+      map[day][hour.to_i] += 1 if @map
+      hmap[day][hour.to_i][minute.to_i] += 1 if @hmap
     else
       puts '  ' + li if @list >= 2
     end
@@ -201,6 +204,7 @@ def aggregate(f, matches = [])
     end
   end
   if @map
+    prev_h = 24
     print "%10s Wd:%s\n" % ["Date\\Time", (0..23).map{|e| " %02d" % e}.join]
     map.sort.each do |k,a|
       wday = Time.parse(k).wday
@@ -210,6 +214,15 @@ def aggregate(f, matches = [])
 	a.map{|e| "%3s" % [(e == 0)? '.' : e]}.join,
 	a.reduce(&:+)
       ], (wday > 5)? '1;35' : '')
+      prev_h = prev_h - 24
+      hmap[k].sort.each do |h,a|
+	print " %2d %02d:xx %s\n" % [
+	  h - prev_h - 1,
+	  h,
+	  a.map{|e| (e == 0)? '.' : '+'}.join
+	]
+	prev_h = h
+      end
     end
   end
 end
@@ -248,6 +261,7 @@ GetoptLong.new(
   ["--exclude",'-e', GetoptLong::REQUIRED_ARGUMENT],
   ["--log",          GetoptLong::NO_ARGUMENT],
   ["--map",          GetoptLong::NO_ARGUMENT],
+  ["--hmap",         GetoptLong::NO_ARGUMENT],
   ["--help",  '-h',  GetoptLong::NO_ARGUMENT]
 ).each do |opt, arg|
   case opt
@@ -296,6 +310,9 @@ GetoptLong.new(
     @log = true
   when '--map'
     @map = true
+  when '--hmap'
+    @map  = true
+    @hmap = true
   when '--daemon'
     @daemon = true
     @delay = arg.to_i if arg.to_i > 0
