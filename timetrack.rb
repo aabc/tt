@@ -130,6 +130,7 @@ def aggregate(f, matches = [])
   marklist = [] # marks output stat
   time_cmds = [] # to track cmds with shared time
   perday = Hash.new(0) # per day stat
+  map = Hash.new {|k,v| k[v] = Array.new(24, 0)} # per day per hour heat map
 
   f.each_line_reverse do |li|
     li.strip!
@@ -165,6 +166,7 @@ def aggregate(f, matches = [])
       perday[day] += 1
       time_cmds.each { |c| cmd_shared[c] += 1.0 / time_cmds.size }
       time_cmds = []
+      map[day][time.to_i] += 1
     else
       puts '  ' + li if @list >= 2
     end
@@ -194,6 +196,12 @@ def aggregate(f, matches = [])
   if @log
     perday.to_a.reverse.each do |k, v|
       puts col("  %s: %d minutes (%.2f hours)" % [k, v, v / 60.0])
+    end
+  end
+  if @map
+    print "%10s: %s\n" % ["Date/Time", (0..23).map{|e| " %02d" % e}.join]
+    map.sort.each do |k,a|
+      print "%10s: %s\n" % [k, a.map{|e| "%3s" % [(e == 0)? '.' : e]}.join]
     end
   end
 end
@@ -231,6 +239,7 @@ GetoptLong.new(
   ["--daemon",'-d',  GetoptLong::OPTIONAL_ARGUMENT],
   ["--exclude",'-e', GetoptLong::REQUIRED_ARGUMENT],
   ["--log",          GetoptLong::NO_ARGUMENT],
+  ["--map",          GetoptLong::NO_ARGUMENT],
   ["--help",  '-h',  GetoptLong::NO_ARGUMENT]
 ).each do |opt, arg|
   case opt
@@ -277,6 +286,8 @@ GetoptLong.new(
     (@exclude ||= []) << arg
   when '--log'
     @log = true
+  when '--map'
+    @map = true
   when '--daemon'
     @daemon = true
     @delay = arg.to_i if arg.to_i > 0
