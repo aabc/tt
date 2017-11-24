@@ -162,7 +162,13 @@ def aggregate(f, matches = [])
     end
     cmd = "#{uid} #{cmd}" if uid
     ts = "#{day} #{time}"
-    break if @limit && (@now - Time.parse(ts)) > @limit
+    if @at
+      break if @at != day and @atfound
+      next if @at != day
+      @atfound = true
+    else
+      break if @limit && (@now - Time.parse(ts)) > @limit
+    end
     mk = ts unless mk
 
     if pts == 'mark'
@@ -274,6 +280,7 @@ GetoptLong.new(
   ["--pwd", "--cwd", GetoptLong::NO_ARGUMENT],
   ["--map",          GetoptLong::NO_ARGUMENT],
   ["--hmap",         GetoptLong::NO_ARGUMENT],
+  ["--at",           GetoptLong::REQUIRED_ARGUMENT],
   ["--help",  '-h',  GetoptLong::NO_ARGUMENT]
 ).each do |opt, arg|
   case opt
@@ -327,6 +334,8 @@ GetoptLong.new(
   when '--hmap'
     @map  = true
     @hmap = true
+  when '--at'
+    @at = arg
   when '--daemon'
     @daemon = true
     @delay = arg.to_i if arg.to_i > 0
